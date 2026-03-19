@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JalSeva — Book a Water Tanker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f5f7fa; color: #1a1a2e; }
+    header { background: #0f3460; color: white; padding: 16px 24px; }
+    header h1 { font-size: 20px; }
+    header p  { font-size: 13px; opacity: 0.7; }
+    .container { max-width: 500px; margin: 32px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    label { display: block; font-size: 13px; color: #555; margin-bottom: 5px; margin-top: 14px; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    button { width: 100%; margin-top: 20px; padding: 13px; background: #0f3460; color: white; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
+    button:hover { background: #16213e; }
+    .confirm { display: none; background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 10px; padding: 20px; text-align: center; margin-top: 20px; }
+    .confirm h2 { color: #2e7d32; font-size: 22px; }
+    .confirm .booking-id { font-size: 28px; font-weight: bold; letter-spacing: 2px; color: #0f3460; margin: 8px 0; }
+    .confirm .eta { font-size: 18px; color: #e65100; font-weight: bold; }
+    .error { color: red; font-size: 13px; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JalSeva</h1>
+    <p>Mira Bhayandar Water Tanker Service</p>
+  </header>
+
+  <div class="container">
+    <div class="card" id="bookingForm">
+      <h2 style="font-size:17px;margin-bottom:4px">Book a Water Tanker</h2>
+      <p style="font-size:13px;color:#888">Fill in your details and we'll send a tanker to you.</p>
+
+      <label>Full Name</label>
+      <input type="text" id="name" placeholder="Your name">
+
+      <label>Mobile Number</label>
+      <input type="tel" id="phone" placeholder="9XXXXXXXXX" maxlength="10">
+
+      <label>Ward / Area</label>
+      <select id="ward">
+        <option value="">Select your ward</option>
+        <option value="A">Ward A — Mira Road East</option>
+        <option value="B">Ward B — Mira Road West</option>
+        <option value="C">Ward C — Bhayandar East</option>
+        <option value="D">Ward D — Bhayandar West</option>
+        <option value="E">Ward E — Uttan</option>
+      </select>
+
+      <label>Building / Flat Address</label>
+      <input type="text" id="address" placeholder="e.g. A-302, Shreeji Heights">
+
+      <label>Tanker Size</label>
+      <select id="size">
+        <option value="500">500 L — Small (₹350)</option>
+        <option value="1000" selected>1000 L — Medium (₹600)</option>
+        <option value="2000">2000 L — Large (₹1,100)</option>
+        <option value="5000">5000 L — Commercial (₹2,500)</option>
+      </select>
+
+      <label>Category (if applicable)</label>
+      <select id="priority">
+        <option value="normal">None</option>
+        <option value="high">Senior Citizen / Medical / PWD</option>
+      </select>
+
+      <div class="error" id="errorMsg">Please fill in all fields.</div>
+      <button onclick="submitBooking()">Confirm Booking</button>
+    </div>
+
+    <div class="confirm" id="confirmBox">
+      <p>Booking Confirmed!</p>
+      <div class="booking-id" id="confirmId"></div>
+      <p>Estimated arrival</p>
+      <div class="eta" id="confirmEta"></div>
+      <p style="margin-top:12px;font-size:13px;color:#555">Show this ID to the tanker driver on arrival.</p>
+      <button onclick="location.reload()" style="margin-top:16px;background:#2e7d32">Book Another</button>
+    </div>
+  </div>
+
+  <script>
+    async function submitBooking() {
+      const name    = document.getElementById('name').value.trim();
+      const phone   = document.getElementById('phone').value.trim();
+      const ward    = document.getElementById('ward').value;
+      const address = document.getElementById('address').value.trim();
+      const size    = parseInt(document.getElementById('size').value);
+      const priority = document.getElementById('priority').value;
+
+      // Simple validation
+      if (!name || !phone || !ward || !address) {
+        document.getElementById('errorMsg').style.display = 'block';
+        return;
+      }
+
+      try {
+        const response = await fetch(window.location.origin + '/api/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone, ward, address, size_litres: size, priority })
+        });
+
+        const data = await response.json();
+
+        // Show confirmation
+        document.getElementById('bookingForm').style.display = 'none';
+        document.getElementById('confirmBox').style.display  = 'block';
+        document.getElementById('confirmId').textContent  = data.booking_id;
+        document.getElementById('confirmEta').textContent = data.eta_minutes + ' minutes';
+
+      } catch (err) {
+        alert('Something went wrong. Please try again.');
+      }
+    }
+  </script>
+</body>
+</html>

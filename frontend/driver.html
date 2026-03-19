@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JalSeva — Driver App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: sans-serif;
+      background: #0f3460;
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .sub { font-size: 13px; opacity: 0.6; margin-bottom: 32px; }
+
+    .card {
+      background: white; color: #1a1a2e;
+      border-radius: 14px; padding: 24px;
+      width: 100%; max-width: 360px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .card label { font-size: 12px; color: #888; display: block; margin-bottom: 6px; }
+    select, input {
+      width: 100%; padding: 11px 12px;
+      border: 1px solid #ddd; border-radius: 8px;
+      font-size: 15px; color: #1a1a2e;
+    }
+
+    .big-btn {
+      width: 100%; max-width: 360px;
+      padding: 18px; font-size: 17px; font-weight: bold;
+      border: none; border-radius: 14px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .start-btn { background: #4caf50; color: white; }
+    .start-btn:hover { background: #388e3c; }
+    .stop-btn  { background: #e53935; color: white; }
+    .stop-btn:hover  { background: #b71c1c; }
+
+    .status-card {
+      background: rgba(255,255,255,0.1);
+      border-radius: 14px; padding: 20px;
+      width: 100%; max-width: 360px;
+      text-align: center; display: none;
+    }
+    .status-card.show { display: block; }
+    .pulse {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #4caf50; display: inline-block;
+      margin-right: 8px; vertical-align: middle;
+      animation: pulse 1.5s infinite;
+    }
+    .pulse.off { background: #e53935; animation: none; }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    .coords {
+      font-size: 12px; opacity: 0.7;
+      margin-top: 10px; font-family: monospace;
+    }
+    .ping-count {
+      font-size: 28px; font-weight: bold;
+      margin-top: 8px; color: #a5d6a7;
+    }
+    .ping-label { font-size: 12px; opacity: 0.7; }
+    .error-msg {
+      background: #ffcdd2; color: #c62828;
+      border-radius: 10px; padding: 14px;
+      width: 100%; max-width: 360px;
+      font-size: 13px; display: none;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>JalSeva Driver</h1>
+  <p class="sub">Your location is shared with dispatch</p>
+
+  <!-- Step 1: select tanker -->
+  <div class="card" id="setupCard">
+    <label>Your Tanker ID</label>
+    <select id="tankerSelect">
+      <option value="">Select your tanker</option>
+      <option value="TK-01">TK-01 — Ramesh K.</option>
+      <option value="TK-02">TK-02 — Sunil M.</option>
+      <option value="TK-03">TK-03 — Dinesh P.</option>
+      <option value="TK-04">TK-04 — Vijay R.</option>
+      <option value="TK-05">TK-05 — Anand S.</option>
+    </select>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <button class="big-btn start-btn" id="startBtn" onclick="startTracking()">
+    Start Shift
+  </button>
+
+  <!-- Status shown while tracking is active -->
+  <div class="status-card" id="statusCard">
+    <div>
+      <span class="pulse" id="pulseDot"></span>
+      <span id="statusText">Sending location...</span>
+    </div>
+    <div class="ping-count" id="pingCount">0</div>
+    <div class="ping-label">location updates sent</div>
+    <div class="coords" id="coordsText">Waiting for GPS...</div>
+  </div>
+
+  <button class="big-btn stop-btn" id="stopBtn"
+          style="display:none;margin-top:16px" onclick="stopTracking()">
+    End Shift
+  </button>
+
+<script t>
+  const API = window.location.origin + '/api'; // your actual IP here
+  let intervalId = null;
+  let pingCount  = 0;
+  let tanker_id  = '';
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 4000);
+  }
+
+  function startTracking() {
+    tanker_id = document.getElementById('tankerSelect').value;
+    if (!tanker_id) { showError('Please select your tanker first.'); return; }
+
+    // Check browser supports geolocation
+    if (!navigator.geolocation) {
+      showError('GPS not supported on this device.');
+      return;
+    }
+
+    // Ask for GPS permission
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        // Permission granted — switch to tracking UI
+        document.getElementById('setupCard').style.display = 'none';
+        document.getElementById('startBtn').style.display  = 'none';
+        document.getElementById('statusCard').classList.add('show');
+        document.getElementById('stopBtn').style.display   = 'block';
+
+        // Send location immediately, then every 10 seconds
+        sendLocation();
+        intervalId = setInterval(sendLocation, 10000);
+      },
+      (err) => {
+        showError('GPS permission denied. Please allow location access.');
+      }
+    );
+  }
+
+  function sendLocation() {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        try {
+          await fetch(`${API}/location`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ tanker_id, lat, lng })
+          });
+
+          pingCount++;
+          document.getElementById('pingCount').textContent  = pingCount;
+          document.getElementById('coordsText').textContent =
+            `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          document.getElementById('statusText').textContent = 'Location sent';
+
+        } catch (err) {
+          document.getElementById('statusText').textContent = 'Connection error — retrying...';
+          document.getElementById('pulseDot').classList.add('off');
+        }
+      },
+      () => { document.getElementById('statusText').textContent = 'GPS signal lost...'; }
+    );
+  }
+
+  function stopTracking() {
+    clearInterval(intervalId);
+    document.getElementById('pulseDot').classList.add('off');
+    document.getElementById('statusText').textContent = 'Shift ended';
+    document.getElementById('stopBtn').style.display  = 'none';
+
+    // Show a simple end-of-shift message
+    document.getElementById('statusCard').innerHTML = `
+      <div style="font-size:32px;margin-bottom:8px">✓</div>
+      <div style="font-weight:bold;font-size:16px">Shift Complete</div>
+      <div style="opacity:0.7;font-size:13px;margin-top:6px">${pingCount} location updates sent</div>
+      <button onclick="location.reload()"
+        style="margin-top:20px;padding:12px 24px;background:white;color:#0f3460;
+               border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:bold">
+        Start New Shift
+      </button>`;
+  }
+</script>
+</body>
+</html>

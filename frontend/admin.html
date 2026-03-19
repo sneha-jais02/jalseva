@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet CSS — put this inside <head> -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <title>JalSeva — Admin Panel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    header {
+      background: #0f3460; color: white;
+      padding: 14px 24px; display: flex;
+      align-items: center; justify-content: space-between;
+    }
+    header h1 { font-size: 18px; }
+    .live-dot {
+      width: 8px; height: 8px; background: #4caf50;
+      border-radius: 50%; display: inline-block;
+      margin-right: 6px; animation: blink 1.5s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; padding: 20px 24px 0;
+    }
+    .stat-card {
+      background: white; border-radius: 10px;
+      padding: 16px; text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .stat-card .num { font-size: 32px; font-weight: bold; }
+    .stat-card .lbl { font-size: 12px; color: #888; margin-top: 4px; }
+    .pending-num  { color: #e65100; }
+    .assigned-num { color: #1565c0; }
+    .done-num     { color: #2e7d32; }
+    .tanker-num   { color: #6a1b9a; }
+
+    .main { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 20px 24px; }
+
+    .card {
+      background: white; border-radius: 10px;
+      padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .card h2 { font-size: 15px; margin-bottom: 14px; color: #0f3460; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 1px solid #eee; font-size: 12px; }
+    td { padding: 10px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
+    tr:hover td { background: #fafafa; }
+
+    .badge {
+      display: inline-block; padding: 3px 9px;
+      border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+    .badge.pending  { background: #fff3e0; color: #e65100; }
+    .badge.assigned { background: #e3f2fd; color: #1565c0; }
+    .badge.delivered{ background: #e8f5e9; color: #2e7d32; }
+    .badge.high     { background: #fce4ec; color: #c62828; }
+    .badge.idle     { background: #f3e5f5; color: #6a1b9a; }
+    .badge.active   { background: #e0f7fa; color: #006064; }
+    .badge.busy     { background: #fff8e1; color: #f57f17; }
+
+    select.assign-select {
+      padding: 5px 8px; border: 1px solid #ddd;
+      border-radius: 6px; font-size: 12px;
+      background: white; cursor: pointer;
+    }
+    button.assign-btn {
+      padding: 5px 12px; background: #0f3460;
+      color: white; border: none; border-radius: 6px;
+      font-size: 12px; cursor: pointer; margin-left: 6px;
+    }
+    button.assign-btn:hover { background: #16213e; }
+    button.deliver-btn {
+      padding: 5px 12px; background: #2e7d32;
+      color: white; border: none; border-radius: 6px;
+      font-size: 12px; cursor: pointer;
+    }
+
+    .tanker-item {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid #f5f5f5;
+    }
+    .tanker-item:last-child { border-bottom: none; }
+    .tanker-id { font-weight: bold; font-size: 13px; color: #0f3460; min-width: 50px; }
+    .tanker-driver { font-size: 12px; color: #555; }
+    .fill-bar-wrap { width: 70px; background: #eee; border-radius: 4px; height: 6px; }
+    .fill-bar { height: 6px; border-radius: 4px; transition: width 0.4s; }
+
+    .refresh-btn {
+      background: #e3f2fd; color: #1565c0;
+      border: none; border-radius: 6px;
+      padding: 6px 12px; font-size: 12px;
+      cursor: pointer; float: right; margin-top: -2px;
+    }
+    .empty { text-align: center; color: #aaa; padding: 30px; font-size: 13px; }
+    .priority-label { font-size: 11px; color: #c62828; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>JalSeva — Dispatch Control</h1>
+  <span><span class="live-dot"></span>Live · Auto-refreshes every 15s</span>
+</header>
+
+<!-- Stats row -->
+<div class="stats">
+  <div class="stat-card">
+    <div class="num pending-num" id="count-pending">–</div>
+    <div class="lbl">Pending</div>
+  </div>
+  <div class="stat-card">
+    <div class="num assigned-num" id="count-assigned">–</div>
+    <div class="lbl">Assigned</div>
+  </div>
+  <div class="stat-card">
+    <div class="num done-num" id="count-delivered">–</div>
+    <div class="lbl">Delivered today</div>
+  </div>
+  <div class="stat-card">
+    <div class="num tanker-num" id="count-tankers">–</div>
+    <div class="lbl">Active tankers</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Bookings table -->
+  <div class="card">
+    <h2>
+  Booking Queue
+  <span id="autoDispatchBadge"
+    style="font-size:11px;background:#e8f5e9;color:#2e7d32;
+           padding:3px 10px;border-radius:20px;margin-left:8px;font-weight:500">
+    Auto-dispatch ON
+  </span>
+  <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+</h2>
+<p style="font-size:12px;color:#888;margin-bottom:14px">
+  Tankers are assigned automatically every 30 seconds.
+  You can still assign manually using the dropdown.
+</p>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Resident</th>
+          <th>Ward</th>
+          <th>Size</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="bookingTable">
+        <tr><td colspan="7" class="empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Tanker panel -->
+  <div>
+    <div class="card">
+      <h2>Fleet Status</h2>
+      <div id="tankerList">Loading...</div>
+    </div>
+  </div>
+<!-- Add this ABOVE the closing </div> of <div class="main"> -->
+<div class="card" style="grid-column: 1 / -1; margin-top: 0;">
+  <h2>Live Tanker Map — Mira Bhayandar</h2>
+  <div id="map" style="height: 380px; border-radius: 8px; z-index: 0;"></div>
+</div>
+</div>
+
+<!-- Leaflet JS + full script — put this before </body> -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const API = window.location.origin + '/api'; 
+  let tankers  = [];
+  let map      = null;
+  let markers  = {};  // tanker_id → Leaflet marker
+
+  // ── Initialise the Leaflet map ────────────────────────────────
+  function initMap() {
+    // Centred on Mira Bhayandar
+    map = L.map('map').setView([19.2952, 72.8544], 13);
+
+    // OpenStreetMap tiles (free, no API key needed)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+  }
+
+  // ── Custom coloured marker for each tanker status ────────────
+  function makeIcon(status) {
+    const colors = { idle: '#6a1b9a', active: '#006064', busy: '#f57f17' };
+    const color  = colors[status] || '#555';
+    // A small SVG circle as the marker
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+      <circle cx="14" cy="14" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
+    </svg>`;
+    return L.divIcon({
+      html:        svg,
+      iconSize:    [28, 28],
+      iconAnchor:  [14, 14],
+      popupAnchor: [0, -16],
+      className:   ''
+    });
+  }
+
+  // ── Update markers on the map ─────────────────────────────────
+  async function updateMap() {
+    if (!map) return;
+    const res  = await fetch(`${API}/locations`);
+    const locs = await res.json();   // array of {tanker_id, lat, lng}
+
+    locs.forEach(loc => {
+      // Find tanker details from our cached list
+      const tanker = tankers.find(t => t.id === loc.tanker_id) || {};
+      const label  = `<b>${loc.tanker_id}</b><br>${tanker.driver_name || ''}<br>
+                      Fill: ${tanker.fill_pct || '?'}%<br>
+                      Status: ${tanker.status || '?'}`;
+
+      if (markers[loc.tanker_id]) {
+        // Move existing marker to new position
+        markers[loc.tanker_id].setLatLng([loc.lat, loc.lng]);
+        markers[loc.tanker_id].setPopupContent(label);
+      } else {
+        // Create a new marker
+        const icon   = makeIcon(tanker.status);
+        const marker = L.marker([loc.lat, loc.lng], { icon })
+                        .addTo(map)
+                        .bindPopup(label);
+        markers[loc.tanker_id] = marker;
+      }
+    });
+  }
+
+  // ── Load & render bookings (same as before) ───────────────────
+  async function loadBookings() {
+    const res  = await fetch(`${API}/bookings`);
+    const data = await res.json();
+
+    document.getElementById('count-pending').textContent =
+      data.filter(b => b.status === 'pending').length;
+    document.getElementById('count-assigned').textContent =
+      data.filter(b => b.status === 'assigned').length;
+    document.getElementById('count-delivered').textContent =
+      data.filter(b => b.status === 'delivered').length;
+
+    const tbody = document.getElementById('bookingTable');
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No bookings yet.</td></tr>';
+      return;
+    }
+    data.sort((a, b) => {
+      if (a.priority === 'high' && b.priority !== 'high') return -1;
+      if (b.priority === 'high' && a.priority !== 'high') return  1;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+    tbody.innerHTML = data.map(b => `
+      <tr>
+        <td><strong>${b.id}</strong></td>
+        <td>${b.name}<br><span style="font-size:11px;color:#888">${b.phone}</span></td>
+        <td>Ward ${b.ward}</td>
+        <td>${b.size_litres} L</td>
+        <td>${b.priority === 'high'
+              ? '<span class="badge high">Priority</span>'
+              : '<span style="color:#aaa;font-size:12px">Normal</span>'}</td>
+        <td><span class="badge ${b.status}">${b.status}</span></td>
+        <td>${actionCell(b)}</td>
+      </tr>`).join('');
+  }
+
+  function actionCell(b) {
+    if (b.status === 'delivered') return '<span style="color:#aaa;font-size:12px">Done</span>';
+    if (b.status === 'assigned')  return `
+      <span style="font-size:11px;color:#555">${b.tanker_id}</span>
+      <button class="deliver-btn" onclick="markDelivered('${b.id}')">Mark Delivered</button>`;
+    const options = tankers
+      .filter(t => t.status !== 'busy')
+      .map(t => `<option value="${t.id}">${t.id} · ${t.driver_name} (${t.fill_pct}%)</option>`)
+      .join('');
+    return `
+      <select class="assign-select" id="sel-${b.id}">
+        <option value="">Select tanker</option>${options}
+      </select>
+      <button class="assign-btn" onclick="assignTanker('${b.id}')">Assign</button>`;
+  }
+
+  // ── Load tankers ──────────────────────────────────────────────
+  async function loadTankers() {
+    const res = await fetch(`${API}/tankers`);
+    tankers   = await res.json();
+    document.getElementById('count-tankers').textContent =
+      tankers.filter(t => t.active).length;
+    document.getElementById('tankerList').innerHTML = tankers.map(t => {
+      const fillColor = t.fill_pct > 50 ? '#43a047'
+                      : t.fill_pct > 20 ? '#fb8c00' : '#e53935';
+      return `
+        <div class="tanker-item">
+          <div>
+            <div class="tanker-id">${t.id}</div>
+            <div class="tanker-driver">${t.driver_name}</div>
+          </div>
+          <div style="text-align:center">
+            <div class="fill-bar-wrap">
+              <div class="fill-bar" style="width:${t.fill_pct}%;background:${fillColor}"></div>
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:3px">${t.fill_pct}% full</div>
+          </div>
+          <span class="badge ${t.status}">${t.status}</span>
+        </div>`;
+    }).join('');
+  }
+
+  async function assignTanker(bookingId) {
+    const tanker_id = document.getElementById(`sel-${bookingId}`).value;
+    if (!tanker_id) { alert('Please select a tanker first.'); return; }
+    await fetch(`${API}/bookings/${bookingId}/assign?tanker_id=${tanker_id}`, { method: 'PATCH' });
+    loadAll();
+  }
+
+  async function markDelivered(bookingId) {
+    await fetch(`${API}/bookings/${bookingId}/deliver`, { method: 'PATCH' });
+    loadAll();
+  }
+
+  // ── Load everything ───────────────────────────────────────────
+  async function loadAll() {
+    await Promise.all([loadBookings(), loadTankers()]);
+    await updateMap();
+  }
+
+  // Boot
+  initMap();
+  loadAll();
+  setInterval(loadAll,  15000);   // refresh data every 15s
+  setInterval(updateMap, 10000);  // refresh map positions every 10s
+</script>
+</body>
+</html>

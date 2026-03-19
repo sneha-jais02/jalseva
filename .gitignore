@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+.venv/
+Pipfile.lock
+
+# VS Code
+.vscode/
