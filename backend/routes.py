@@ -120,3 +120,18 @@ def get_tanker_location(tanker_id: str):
     if not pos:
         raise HTTPException(status_code=404, detail="No location data yet")
     return pos
+
+# ── POST /tankers/seed — adds default tankers (run once after deploy) ──
+@router.post("/tankers/seed")
+def seed_tankers(db: Session = Depends(get_db)):
+    default_tankers = [
+        Tanker(id="TK-01", driver_name="Ramesh K.",  capacity=5000, fill_pct=85, ward="A"),
+        Tanker(id="TK-02", driver_name="Sunil M.",   capacity=3000, fill_pct=60, ward="B"),
+        Tanker(id="TK-03", driver_name="Dinesh P.",  capacity=5000, fill_pct=90, ward="B"),
+        Tanker(id="TK-04", driver_name="Vijay R.",   capacity=2000, fill_pct=40, ward="C"),
+        Tanker(id="TK-05", driver_name="Anand S.",   capacity=5000, fill_pct=100, ward="D"),
+    ]
+    for t in default_tankers:
+        db.merge(t)
+    db.commit()
+    return {"message": "Tankers seeded successfully"}
