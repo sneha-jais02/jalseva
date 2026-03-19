@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import Integer
 from pydantic import BaseModel
 from typing import Optional
 from database import get_db
@@ -135,3 +136,90 @@ def seed_tankers(db: Session = Depends(get_db)):
         db.merge(t)
     db.commit()
     return {"message": "Tankers seeded successfully"}
+
+from sqlalchemy import func
+from datetime import datetime, timedelta
+
+# ── GET /analytics/summary — key numbers for the dashboard ───────
+@router.get("/analytics/summary")
+def analytics_summary(db: Session = Depends(get_db)):
+    total     = db.query(Booking).count()
+    pending   = db.query(Booking).filter(Booking.status == "pending").count()
+    assigned  = db.query(Booking).filter(Booking.status == "assigned").count()
+    delivered = db.query(Booking).filter(Booking.status == "delivered").count()
+
+    # Fulfillment rate
+    fulfillment = round((delivered / total * 100), 1) if total > 0 else 0
+
+    # Average ETA of delivered bookings
+    avg_eta = db.query(func.avg(Booking.eta_minutes)).filter(
+        Booking.status == "delivered"
+    ).scalar()
+    avg_eta = round(avg_eta, 1) if avg_eta else 0
+
+    # Priority bookings fulfilled
+    priority_total     = db.query(Booking).filter(Booking.priority == "high").count()
+    priority_delivered = db.query(Booking).filter(
+        Booking.priority == "high",
+        Booking.status   == "delivered"
+    ).count()
+    priority_rate = round((priority_delivered / priority_total * 100), 1) if priority_total > 0 else 0
+
+    return {
+        "total":          total,
+        "pending":        pending,
+        "assigned":       assigned,
+        "delivered":      delivered,
+        "fulfillment":    fulfillment,
+        "avg_eta":        avg_eta,
+        "priority_rate":  priority_rate,
+    }
+
+# ── GET /analytics/by-ward — bookings count per ward ─────────────
+@router.get("/analytics/by-ward")
+def analytics_by_ward(db: Session = Depends(get_db)):
+    results = db.query(
+        Booking.ward,
+        func.count(Booking.id).label("total"),
+        func.sum(
+            (Booking.status == "delivered").cast(Integer)
+        ).label("delivered")
+    ).group_by(Booking.ward).all()
+
+    return [
+        {
+            "ward":      r.ward,
+            "total":     r.total,
+            "delivered": r.delivered or 0,
+        }
+        for r in results
+    ]
+
+# ── GET /analytics/by-size — popular tanker sizes ────────────────
+@router.get("/analytics/by-size")
+def analytics_by_size(db: Session = Depends(get_db)):
+    results = db.query(
+        Booking.size_litres,
+        func.count(Booking.id).label("count")
+    ).group_by(Booking.size_litres).order_by(Booking.size_litres).all()
+
+    return [{"size": r.size_litres, "count": r.count} for r in results]
+
+# ── GET /analytics/recent — last 7 days delivery count ───────────
+@router.get("/analytics/recent")
+def analytics_recent(db: Session = Depends(get_db)):
+    days = []
+    for i in range(6, -1, -1):
+        day        = datetime.now() - timedelta(days=i)
+        day_start  = day.replace(hour=0,  minute=0,  second=0)
+        day_end    = day.replace(hour=23, minute=59, second=59)
+        count      = db.query(Booking).filter(
+            Booking.created_at >= day_start,
+            Booking.created_at <= day_end
+        ).count()
+        days.append({
+            "day":   day.strftime("%a"),   # Mon, Tue etc
+            "date":  day.strftime("%d %b"),
+            "count": count
+        })
+    return days
