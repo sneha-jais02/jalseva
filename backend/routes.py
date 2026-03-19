@@ -21,7 +21,6 @@ class BookingRequest(BaseModel):
 # ── POST /bookings — resident submits a booking ───────────────────
 @router.post("/bookings")
 def create_booking(data: BookingRequest, db: Session = Depends(get_db)):
-    # Generate a booking ID like WTR-A3F1
     booking_id = "WTR-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
     booking = Booking(
@@ -33,12 +32,21 @@ def create_booking(data: BookingRequest, db: Session = Depends(get_db)):
         size_litres = data.size_litres,
         priority    = data.priority,
         status      = "pending",
-        eta_minutes = random.randint(15, 45)  # real ETA logic comes in Phase 3
+        eta_minutes = random.randint(15, 45)
     )
     db.add(booking)
     db.commit()
     db.refresh(booking)
-    return {"booking_id": booking.id, "eta_minutes": booking.eta_minutes, "status": "pending"}
+
+    # Run dispatch immediately after every new booking
+    from algorithm import run_dispatch
+    run_dispatch(latest_positions)
+
+    return {
+        "booking_id":  booking.id,
+        "eta_minutes": booking.eta_minutes,
+        "status":      "pending"
+    }
 
 # ── GET /bookings — admin sees all bookings ───────────────────────
 @router.get("/bookings")
@@ -223,3 +231,11 @@ def analytics_recent(db: Session = Depends(get_db)):
             "count": count
         })
     return days
+
+# ── POST /dispatch/run — manually trigger the algorithm ──────────
+# Called by the admin page every 30 seconds via JavaScript
+@router.post("/dispatch/run")
+def trigger_dispatch():
+    from algorithm import run_dispatch
+    run_dispatch(latest_positions)
+    return {"message": "Dispatch ran successfully"}

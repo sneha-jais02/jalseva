@@ -341,7 +341,17 @@
   // Boot
   initMap();
   loadAll();
-  setInterval(loadAll,  15000);   // refresh data every 15s
+  // Refresh display every 15 seconds
+setInterval(loadAll, 15000);
+
+// Trigger dispatch every 30 seconds from the browser
+// This replaces the background scheduler which doesn't
+// work reliably on Render's free tier
+async function triggerDispatch() {
+    await fetch(`${API}/dispatch/run`, { method: 'POST' });
+    await loadAll();
+}
+setInterval(triggerDispatch, 30000);
   setInterval(updateMap, 10000);  // refresh map positions every 10s
 </script>
 </body>
