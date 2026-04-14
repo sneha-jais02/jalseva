@@ -9,3 +9,5 @@ link : https://jalseva.onrender.com/driver.html
 how to view analytics dashboard:
 
 link : https://jalseva.onrender.com/analytics.html
+
+admin panel: https://jalseva.onrender.com/admin.html
